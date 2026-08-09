@@ -685,11 +685,13 @@ ${patientText}
     document.addEventListener('click', unlockSpeech, { once:true, capture:true });
     document.addEventListener('touchstart', unlockSpeech, { once:true, capture:true });
 
+    let currentUtterance = null; // keep a persistent reference so Chrome doesn't GC it mid-speech
     function speak(text, onDone){
       if(!('speechSynthesis' in window)){ if(onDone) onDone(); return; }
       try{
         window.speechSynthesis.cancel();
         const utter = new SpeechSynthesisUtterance(text);
+        currentUtterance = utter; // prevents Chrome's mid-utterance garbage-collection cutoff bug
         const voice = pickBestVoice();
         if(voice){
           utter.voice = voice;
@@ -701,14 +703,14 @@ ${patientText}
         utter.pitch = 1.04;
         utter.onboundary = () => pulseMouth();
         utter.onstart = () => { pulseMouth(); startKeepAlive(); };
-        utter.onend = () => { stopKeepAlive(); if(onDone) onDone(); };
-        utter.onerror = () => { stopKeepAlive(); if(onDone) onDone(); };
+        utter.onend = () => { stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
+        utter.onerror = () => { stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
 
         if(!cachedVoices.length){
           setTimeout(() => { refreshVoices(); }, 150);
         }
         window.speechSynthesis.speak(utter);
-      }catch(e){ stopKeepAlive(); if(onDone) onDone(); }
+      }catch(e){ stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); }
     }
 
     function showThoughtBubble(text){
