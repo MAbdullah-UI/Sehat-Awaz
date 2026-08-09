@@ -300,7 +300,16 @@
     <div class="madad-topbar">
       <div class="madad-logo"><img src="1.jpg" alt="Medi-Care logo"></div>
       <div class="madad-wordmark">Madad<span>AI FIRST-AID · URDU</span></div>
+      <button id="voiceTestBtn" title="TTS awaz test karein" style="background:none;border:none;font-size:20px;cursor:pointer;margin-right:6px;">🔊</button>
       <button id="settingsBtn" title="Groq API Key set karein">⚙️</button>
+    </div>
+    <div id="voiceTestPanel" style="display:none; font-family:'Inter',sans-serif; font-size:12px; background:#fff8e1; border:1px solid #e6c25a; border-radius:10px; padding:10px; margin:8px 0; text-align:center;">
+      <div id="voiceTestName" style="margin-bottom:6px; font-weight:600;"></div>
+      <div style="display:flex; gap:8px; justify-content:center;">
+        <button id="voiceTestPlay" style="padding:6px 12px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer;">▶️ Suno</button>
+        <button id="voiceTestNext" style="padding:6px 12px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer;">⏭️ Agli Voice</button>
+        <button id="voiceTestUse" style="padding:6px 12px; border-radius:8px; border:1px solid #2e7d32; background:#c8e6c9; cursor:pointer;">✅ Yeh Rakho</button>
+      </div>
     </div>
 
     <div class="madad-title">Madad</div>
@@ -511,6 +520,164 @@ ${patientText}
       else localStorage.removeItem('madad_groq_key');
     }
 
+    // ---------------- Groq Orpheus TTS (Arabic voice reading Urdu text) ----------------
+    // Groq has no Urdu TTS model. We use the Arabic (Saudi) Orpheus voice as the closest
+    // available option since Urdu shares the Perso-Arabic script — pronunciation of
+    // Urdu-specific letters/sounds will NOT be fully accurate, but it produces real,
+    // consistent audio for every visitor (no dependency on the visitor's own OS/voices).
+    // ---------------- Local Urdu TTS Bridge (edge-tts, real ur-PK voice) ----------------
+    // Run tts_backend/tts_server.py locally (see its file header for setup) — it wraps
+    // Microsoft's free edge-tts service so this static page can get genuine Urdu speech.
+    const LOCAL_TTS_URL = "http://127.0.0.1:5050/tts";
+    let localTtsAvailable = null; // null = unknown yet, true/false once checked
+
+    async function checkLocalTtsBridge(){
+      try{
+        const resp = await fetch("http://127.0.0.1:5050/health", { method: "GET" });
+        localTtsAvailable = resp.ok;
+      }catch(e){
+        localTtsAvailable = false;
+      }
+      return localTtsAvailable;
+    }
+    checkLocalTtsBridge();
+
+    async function speakViaLocalBridge(text, onDone){
+      try{
+        const resp = await fetch(LOCAL_TTS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text })
+        });
+        if(!resp.ok) throw new Error("tts-bridge-http-" + resp.status);
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentTtsAudio = audio;
+        audio.onplay = () => pulseMouth();
+        audio.ontimeupdate = () => pulseMouth();
+        audio.onended = () => { URL.revokeObjectURL(url); if(onDone) onDone(); };
+        audio.onerror = () => { URL.revokeObjectURL(url); if(onDone) onDone(); };
+        await audio.play();
+      }catch(err){
+        console.warn('Local TTS bridge failed, falling back to Groq Arabic voice:', err);
+        localTtsAvailable = false;
+        speakViaGroq(text, onDone);
+      }
+    }
+
+    // Master entry point: real Urdu (local bridge) > Arabic-via-Groq > browser voice.
+    async function speakBest(text, onDone){
+      if(localTtsAvailable === null) await checkLocalTtsBridge();
+      if(localTtsAvailable){
+        speakViaLocalBridge(text, onDone);
+      } else {
+        speakViaGroq(text, onDone);
+      }
+    }
+
+    const GROQ_TTS_MODEL = "canopylabs/orpheus-arabic-saudi";
+    const GROQ_TTS_VOICE = "lulwa";
+    const GROQ_TTS_MAX_CHARS = 190; // API hard limit is 200; leave margin
+
+    function splitForTts(text){
+      const clean = (text || '').trim();
+      if(!clean) return [];
+      // Prefer splitting on Urdu/Arabic full-stop (۔) and normal punctuation, else on spaces.
+      const parts = clean.split(/(?<=[۔.!?])\s+/);
+      const chunks = [];
+      let current = '';
+      for(const part of parts){
+        const candidate = current ? current + ' ' + part : part;
+        if(candidate.length <= GROQ_TTS_MAX_CHARS){
+          current = candidate;
+        } else {
+          if(current) chunks.push(current);
+          if(part.length <= GROQ_TTS_MAX_CHARS){
+            current = part;
+          } else {
+            // A single "sentence" is still too long — hard-wrap on spaces.
+            let words = part.split(' ');
+            let piece = '';
+            for(const w of words){
+              const cand2 = piece ? piece + ' ' + w : w;
+              if(cand2.length <= GROQ_TTS_MAX_CHARS){ piece = cand2; }
+              else { if(piece) chunks.push(piece); piece = w; }
+            }
+            current = piece;
+          }
+        }
+      }
+      if(current) chunks.push(current);
+      return chunks;
+    }
+
+    async function fetchTtsAudioUrl(text){
+      const key = getApiKey();
+      if(!key) throw new Error('no-api-key');
+      const resp = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + key,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: GROQ_TTS_MODEL,
+          voice: GROQ_TTS_VOICE,
+          input: text,
+          response_format: 'wav'
+        })
+      });
+      if(!resp.ok) throw new Error('tts-http-' + resp.status);
+      const blob = await resp.blob();
+      return URL.createObjectURL(blob);
+    }
+
+    let currentTtsAudio = null;
+    function stopGroqTts(){
+      if(currentTtsAudio){
+        try{ currentTtsAudio.pause(); }catch(e){}
+        currentTtsAudio = null;
+      }
+    }
+
+    async function speakViaGroq(text, onDone){
+      const chunks = splitForTts(text);
+      if(!chunks.length){ if(onDone) onDone(); return; }
+
+      let audioUrls;
+      try{
+        // Fetch all chunks in parallel for lower latency, then play in order.
+        audioUrls = await Promise.all(chunks.map(fetchTtsAudioUrl));
+      }catch(err){
+        console.warn('Groq TTS fetch failed, falling back to browser voice:', err);
+        showTtsWarning("Online Urdu/Arabic awaz nahi mil saki, device ki awaz try ki ja rahi hai.");
+        speak(text, onDone);
+        return;
+      }
+
+      let i = 0;
+      const playNext = () => {
+        if(i >= audioUrls.length){
+          stopGroqTts();
+          if(onDone) onDone();
+          return;
+        }
+        const audio = new Audio(audioUrls[i]);
+        currentTtsAudio = audio;
+        audio.onplay = () => pulseMouth();
+        audio.ontimeupdate = () => pulseMouth();
+        audio.onended = () => { URL.revokeObjectURL(audioUrls[i]); i++; playNext(); };
+        audio.onerror = () => { URL.revokeObjectURL(audioUrls[i]); i++; playNext(); };
+        audio.play().catch(err => {
+          console.warn('Audio playback blocked:', err);
+          showTtsWarning("Awaz play nahi ho saki — page par ek dafa click/tap zaroor karein.");
+          i++; playNext();
+        });
+      };
+      playNext();
+    }
+
     async function askGroq(patientText, historyArr){
       const key = getApiKey();
       if(!key) return null;
@@ -648,15 +815,71 @@ ${patientText}
       window.speechSynthesis.onvoiceschanged = refreshVoices;
     }
 
+    function getPreferredVoiceName(){ return localStorage.getItem('madad_voice_name') || null; }
+    function setPreferredVoiceName(name){
+      if(name) localStorage.setItem('madad_voice_name', name);
+      else localStorage.removeItem('madad_voice_name');
+    }
+
     function pickBestVoice(){
       if(!cachedVoices.length) refreshVoices();
       if(!cachedVoices.length) return null;
+      const preferred = getPreferredVoiceName();
+      if(preferred){
+        const match = cachedVoices.find(v => v.name === preferred);
+        if(match) return match;
+      }
       const byLangPrefix = (p) => cachedVoices.find(v => v.lang && v.lang.toLowerCase().startsWith(p));
       const byNameMatch = (re) => cachedVoices.find(v => re.test(v.name));
       
       return byLangPrefix('ur') || byNameMatch(/urdu/i) || byLangPrefix('ar') ||
              byNameMatch(/arabic/i) || byLangPrefix('hi') || cachedVoices[0] || null;
     }
+
+    // ---------------- Voice Test Panel ----------------
+    let voiceTestIdx = 0;
+    function voiceTestList(){
+      if(!cachedVoices.length) refreshVoices();
+      return cachedVoices;
+    }
+    function voiceTestShowCurrent(){
+      const list = voiceTestList();
+      const nameEl = document.getElementById('voiceTestName');
+      if(!list.length){ nameEl.textContent = 'Koi voice nahi mili is device par.'; return; }
+      voiceTestIdx = ((voiceTestIdx % list.length) + list.length) % list.length;
+      const v = list[voiceTestIdx];
+      nameEl.textContent = `${voiceTestIdx + 1}/${list.length}: ${v.name} (${v.lang})`;
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      const testBtn = document.getElementById('voiceTestBtn');
+      const panel = document.getElementById('voiceTestPanel');
+      const playBtn = document.getElementById('voiceTestPlay');
+      const nextBtn = document.getElementById('voiceTestNext');
+      const useBtn = document.getElementById('voiceTestUse');
+      if(!testBtn) return;
+      testBtn.addEventListener('click', () => {
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        if(panel.style.display === 'block') voiceTestShowCurrent();
+      });
+      nextBtn.addEventListener('click', () => { voiceTestIdx++; voiceTestShowCurrent(); });
+      playBtn.addEventListener('click', () => {
+        const list = voiceTestList();
+        if(!list.length) return;
+        const v = list[voiceTestIdx];
+        try{
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance('Salam, yeh awaz test hai.');
+          u.voice = v; u.lang = v.lang; u.volume = 1;
+          window.speechSynthesis.speak(u);
+        }catch(e){}
+      });
+      useBtn.addEventListener('click', () => {
+        const list = voiceTestList();
+        if(!list.length) return;
+        setPreferredVoiceName(list[voiceTestIdx].name);
+        document.getElementById('voiceTestName').textContent = '✅ Save ho gayi: ' + list[voiceTestIdx].name;
+      });
+    });
 
     let speakKeepAlive = null;
     function startKeepAlive(){
@@ -672,57 +895,110 @@ ${patientText}
       if(speakKeepAlive){ clearInterval(speakKeepAlive); speakKeepAlive = null; }
     }
 
-    let ttsUnlocked = false;
     function unlockSpeech(){
-      if(ttsUnlocked || !('speechSynthesis' in window)) return;
-      ttsUnlocked = true;
+      if(!('speechSynthesis' in window)) return;
       try{
-        const primer = new SpeechSynthesisUtterance(' ');
-        primer.volume = 0;
+        // NOTE: a single-space/empty utterance can make Chrome/Android think an
+        // utterance is permanently "pending" (known bug) which then silently
+        // blocks every real utterance queued after it. Use a real short word
+        // at (near) zero volume instead, and hard-cancel it right away so it
+        // can never get stuck in the queue.
+        const primer = new SpeechSynthesisUtterance('ok');
+        primer.volume = 0.01;
         window.speechSynthesis.speak(primer);
+        setTimeout(() => { try{ window.speechSynthesis.cancel(); }catch(e){} }, 30);
       }catch(e){}
     }
-    document.addEventListener('click', unlockSpeech, { once:true, capture:true });
-    document.addEventListener('touchstart', unlockSpeech, { once:true, capture:true });
+    // Re-prime on every tap (not just the first) — this keeps the browser's
+    // "user activated audio" permission fresh so speak() calls that fire a
+    // second or two later (after the thinking delay) aren't silently dropped.
+    document.addEventListener('click', unlockSpeech, { capture:true });
+    document.addEventListener('touchstart', unlockSpeech, { capture:true });
+
+    function showTtsWarning(msg){
+      try{
+        if(typeof warnBanner === 'undefined') return;
+        warnBanner.textContent = "⚠️ " + msg;
+        warnBanner.classList.add('show');
+      }catch(e){}
+    }
 
     let currentUtterance = null; // keep a persistent reference so Chrome doesn't GC it mid-speech
     function speak(text, onDone){
       if(!('speechSynthesis' in window)){ if(onDone) onDone(); return; }
+      let watchdog = null;
+      const finish = () => { if(watchdog){ clearTimeout(watchdog); watchdog = null; } stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
       try{
-        const doSpeak = () => {
+        const doSpeak = (attempt = 1) => {
           try{
             const utter = new SpeechSynthesisUtterance(text);
             currentUtterance = utter; // prevents Chrome's mid-utterance garbage-collection cutoff bug
-            const voice = pickBestVoice();
-            if(voice){
-              utter.voice = voice;
-              utter.lang = voice.lang;
-            } else {
-              utter.lang = "ur-PK";
+            // On a retry, skip our own voice pick entirely. On many Windows
+            // Chrome setups an ur/hi/ar voice shows up in getVoices() but its
+            // language pack isn't fully installed — it produces total silence
+            // with no error. Falling back to the browser/OS default voice
+            // (no .voice, no .lang override) sidesteps that.
+            if(attempt === 1){
+              const voice = pickBestVoice();
+              if(voice){
+                utter.voice = voice;
+                utter.lang = voice.lang;
+              } else {
+                utter.lang = "ur-PK";
+              }
             }
             utter.rate = 0.92;
             utter.pitch = 1.04;
+            utter.volume = 1;
             utter.onboundary = () => pulseMouth();
-            utter.onstart = () => { pulseMouth(); startKeepAlive(); };
-            utter.onend = () => { stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
-            utter.onerror = (e) => { console.warn('speechSynthesis error:', e.error); stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
+            utter.onstart = () => { if(watchdog){ clearTimeout(watchdog); watchdog = null; } pulseMouth(); startKeepAlive(); };
+            utter.onend = finish;
+            utter.onerror = (e) => {
+              console.warn('speechSynthesis error:', e.error);
+              // Retry once with the plain default voice — a bad voice/lang
+              // pairing is a common cause of silent, error-free failure.
+              if(attempt === 1 && e.error !== 'canceled' && e.error !== 'interrupted'){
+                try{ window.speechSynthesis.cancel(); }catch(err){}
+                setTimeout(() => doSpeak(2), 80);
+                return;
+              }
+              showTtsWarning("Awaz nahi ban saki (" + (e.error || 'unknown') + "). Device mein Urdu/text-to-speech voice check karein.");
+              finish();
+            };
 
             if(!cachedVoices.length){
               setTimeout(() => { refreshVoices(); }, 150);
             }
             window.speechSynthesis.speak(utter);
-          }catch(e){ console.warn('speak() failed:', e); stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); }
+
+            // Watchdog: some browsers silently drop speak() (no onstart, no
+            // onerror) when the queue got wedged or a voice failed to load.
+            // If nothing happens within 1.2s, force-reset and retry once.
+            if(watchdog) clearTimeout(watchdog);
+            watchdog = setTimeout(() => {
+              if(!window.speechSynthesis.speaking){
+                console.warn('speechSynthesis: stuck/no audio, resetting');
+                try{ window.speechSynthesis.cancel(); }catch(e){}
+                if(attempt === 1){
+                  setTimeout(() => doSpeak(2), 80);
+                } else {
+                  showTtsWarning("Awaz load nahi ho saki. Page reload karein ya device par TTS voice install karein.");
+                  finish();
+                }
+              }
+            }, 1200);
+          }catch(e){ console.warn('speak() failed:', e); finish(); }
         };
 
         // Chrome has a known bug where calling speak() immediately after cancel()
         // leaves the queue stuck with no sound and no error. A short delay avoids it.
         if(window.speechSynthesis.speaking || window.speechSynthesis.pending){
           window.speechSynthesis.cancel();
-          setTimeout(doSpeak, 60);
+          setTimeout(() => doSpeak(1), 60);
         } else {
-          doSpeak();
+          doSpeak(1);
         }
-      }catch(e){ console.warn('speak() outer failed:', e); stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); }
+      }catch(e){ console.warn('speak() outer failed:', e); finish(); }
     }
 
     function showThoughtBubble(text){
@@ -789,7 +1065,7 @@ ${patientText}
         updateWhatsappLink();
 
         const speakText = answerIsUrduScript ? answer : getAdviceUrdu(text);
-        speak(speakText, () => {
+        speakBest(speakText, () => {
           setRobotState('idle', isEmergency);
           document.getElementById('stateLabel').textContent = isEmergency ? "Emergency Advice" : "Madad Yahan Hai";
         });
