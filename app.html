@@ -689,28 +689,40 @@ ${patientText}
     function speak(text, onDone){
       if(!('speechSynthesis' in window)){ if(onDone) onDone(); return; }
       try{
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(text);
-        currentUtterance = utter; // prevents Chrome's mid-utterance garbage-collection cutoff bug
-        const voice = pickBestVoice();
-        if(voice){
-          utter.voice = voice;
-          utter.lang = voice.lang;
-        } else {
-          utter.lang = "ur-PK";
-        }
-        utter.rate = 0.92;
-        utter.pitch = 1.04;
-        utter.onboundary = () => pulseMouth();
-        utter.onstart = () => { pulseMouth(); startKeepAlive(); };
-        utter.onend = () => { stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
-        utter.onerror = () => { stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
+        const doSpeak = () => {
+          try{
+            const utter = new SpeechSynthesisUtterance(text);
+            currentUtterance = utter; // prevents Chrome's mid-utterance garbage-collection cutoff bug
+            const voice = pickBestVoice();
+            if(voice){
+              utter.voice = voice;
+              utter.lang = voice.lang;
+            } else {
+              utter.lang = "ur-PK";
+            }
+            utter.rate = 0.92;
+            utter.pitch = 1.04;
+            utter.onboundary = () => pulseMouth();
+            utter.onstart = () => { pulseMouth(); startKeepAlive(); };
+            utter.onend = () => { stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
+            utter.onerror = (e) => { console.warn('speechSynthesis error:', e.error); stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); };
 
-        if(!cachedVoices.length){
-          setTimeout(() => { refreshVoices(); }, 150);
+            if(!cachedVoices.length){
+              setTimeout(() => { refreshVoices(); }, 150);
+            }
+            window.speechSynthesis.speak(utter);
+          }catch(e){ console.warn('speak() failed:', e); stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); }
+        };
+
+        // Chrome has a known bug where calling speak() immediately after cancel()
+        // leaves the queue stuck with no sound and no error. A short delay avoids it.
+        if(window.speechSynthesis.speaking || window.speechSynthesis.pending){
+          window.speechSynthesis.cancel();
+          setTimeout(doSpeak, 60);
+        } else {
+          doSpeak();
         }
-        window.speechSynthesis.speak(utter);
-      }catch(e){ stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); }
+      }catch(e){ console.warn('speak() outer failed:', e); stopKeepAlive(); currentUtterance = null; if(onDone) onDone(); }
     }
 
     function showThoughtBubble(text){
