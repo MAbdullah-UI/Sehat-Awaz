@@ -525,31 +525,20 @@ ${patientText}
     // available option since Urdu shares the Perso-Arabic script — pronunciation of
     // Urdu-specific letters/sounds will NOT be fully accurate, but it produces real,
     // consistent audio for every visitor (no dependency on the visitor's own OS/voices).
-    // ---------------- Local Urdu TTS Bridge (edge-tts, real ur-PK voice) ----------------
-    // Run tts_backend/tts_server.py locally (see its file header for setup) — it wraps
-    // Microsoft's free edge-tts service so this static page can get genuine Urdu speech.
-    const LOCAL_TTS_URL = "http://127.0.0.1:5050/tts";
-    let localTtsAvailable = null; // null = unknown yet, true/false once checked
+    // ---------------- Urdu TTS via Vercel Serverless Function ----------------
+    // /api/tts.py (deployed alongside this page on Vercel) wraps Microsoft's
+    // free edge-tts service for a real ur-PK voice. Same-origin call — no
+    // CORS setup, no separate server to run, works automatically once deployed.
+    const TTS_API_URL = "/api/tts";
 
-    async function checkLocalTtsBridge(){
+    async function speakViaApi(text, onDone){
       try{
-        const resp = await fetch("http://127.0.0.1:5050/health", { method: "GET" });
-        localTtsAvailable = resp.ok;
-      }catch(e){
-        localTtsAvailable = false;
-      }
-      return localTtsAvailable;
-    }
-    checkLocalTtsBridge();
-
-    async function speakViaLocalBridge(text, onDone){
-      try{
-        const resp = await fetch(LOCAL_TTS_URL, {
+        const resp = await fetch(TTS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text })
         });
-        if(!resp.ok) throw new Error("tts-bridge-http-" + resp.status);
+        if(!resp.ok) throw new Error("tts-api-http-" + resp.status);
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
@@ -560,20 +549,14 @@ ${patientText}
         audio.onerror = () => { URL.revokeObjectURL(url); if(onDone) onDone(); };
         await audio.play();
       }catch(err){
-        console.warn('Local TTS bridge failed, falling back to Groq Arabic voice:', err);
-        localTtsAvailable = false;
+        console.warn('/api/tts failed, falling back to Groq Arabic voice:', err);
         speakViaGroq(text, onDone);
       }
     }
 
-    // Master entry point: real Urdu (local bridge) > Arabic-via-Groq > browser voice.
+    // Master entry point: real Urdu (Vercel /api/tts) > Arabic-via-Groq fallback.
     async function speakBest(text, onDone){
-      if(localTtsAvailable === null) await checkLocalTtsBridge();
-      if(localTtsAvailable){
-        speakViaLocalBridge(text, onDone);
-      } else {
-        speakViaGroq(text, onDone);
-      }
+      speakViaApi(text, onDone);
     }
 
     const GROQ_TTS_MODEL = "canopylabs/orpheus-arabic-saudi";
