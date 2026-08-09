@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="ur-Latn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Madad — AI First-Aid Voice Assistant</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Cinzel:wght@500;600;700&family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap');
+
+  :root{
+    --bg:#FFFFFF;
+    --border: rgba(20,18,14,0.09);
+    --text:#1E1B16;
+    --muted:#7A7468;
+    --accent:#2E2C28;
+    --accent-soft: rgba(46,109,160,0.06);
+    --accent2:#0F0E0C;
+    --logo-grad: linear-gradient(150deg, #0F0E0C, #2E2C28);
+    --title-grad: linear-gradient(90deg, #0F0E0C 20%, #45423C 55%, #0F0E0C 100%);
+    --card-bg: rgba(20,18,14,0.03);
+    --container-shadow: 0 20px 60px -28px rgba(20,18,14,0.14), inset 0 1px 0 rgba(255,255,255,0.7);
+    --chip-bg: rgba(20,18,14,0.04);
+    --chip-bg-hover: rgba(20,18,14,0.065);
+    --orb-color:#B8935B;
+  }
+
+  *{ box-sizing:border-box; }
+  html, body{ margin:0; padding:0; font-family:'Inter', sans-serif; }
+
+  body{
+    background: radial-gradient(circle at 20% -10%, var(--accent-soft), transparent 45%), var(--bg);
+    color: var(--text);
+    min-height:100vh;
+  }
+
+  .container{
+    max-width: 660px;
+    margin: 24px auto 60px;
+    padding: 8px 8px 32px;
+    background: linear-gradient(180deg, rgba(20,18,14,0.015), rgba(255,255,255,0.6));
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    box-shadow: var(--container-shadow);
+    position: relative;
+  }
+
+  .madad-topbar{
+    display:flex; align-items:center; gap:10px;
+    padding: 14px 20px; margin: 4px -8px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+  .madad-logo{
+    width:32px; height:32px; border-radius:9px;
+    box-shadow: 0 0 16px var(--accent-soft);
+    position:relative; flex-shrink:0;
+    overflow:hidden;
+  }
+  .madad-logo img{
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+  .madad-wordmark{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:14px; color:var(--text); }
+  .madad-wordmark span{
+    display:block; font-size:10px; font-weight:500; letter-spacing:0.12em;
+    color:var(--muted); margin-top:-2px;
+  }
+
+  .madad-title{
+    text-align:center; font-family:'Cinzel', serif;
+    font-size: 42px; font-weight: 700; letter-spacing:0.03em; margin: 18px 0 6px;
+    background: var(--title-grad);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+
+  .offline-badge{
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    width:fit-content; margin: 0 auto 10px; padding: 5px 14px;
+    border-radius: 999px; font-family:'Inter', sans-serif;
+    font-size: 11px; font-weight:600; letter-spacing:0.05em;
+    background: rgba(250,180,60,0.12); border:1px solid rgba(250,180,60,0.4);
+    color:#FAB43C;
+  }
+
+  .state-label{
+    text-align:center; font-family:'Cinzel', serif; font-weight:600;
+    font-size:13px; margin: 4px 0 4px; text-transform:uppercase; letter-spacing:0.12em;
+    color: var(--orb-color);
+    text-shadow: 0 0 14px currentColor;
+    transition: color 0.4s ease;
+  }
+
+  #robot-wrap{
+    position:relative; width:calc(100% - 40px); height:280px; margin: 6px 20px 4px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:26px; overflow:hidden;
+    background: radial-gradient(115% 85% at 50% 28%, #FFFFFF 0%, #F3F5F7 45%, #E3E8EC 100%);
+  }
+  #bot-canvas{ width:100%; height:100%; display:block; }
+
+  .thought-bubble{
+    position:absolute; top:14px; left:50%; transform: translateX(-50%) translateY(-6px) scale(0.92);
+    max-width: 80%;
+    background: rgba(255,255,255,0.94);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 9px 16px;
+    font-family:'Inter', sans-serif; font-size:12.5px; color: var(--text);
+    text-align:center; line-height:1.5;
+    opacity:0; pointer-events:none;
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    box-shadow: 0 10px 24px -12px rgba(0,0,0,0.28);
+    z-index:5;
+  }
+  .thought-bubble.show{ opacity:1; transform: translateX(-50%) translateY(0) scale(1); }
+  .thought-bubble::before, .thought-bubble::after{
+    content:''; position:absolute; background: rgba(255,255,255,0.94); border:1px solid var(--border);
+    border-radius:50%;
+  }
+  .thought-bubble::before{ width:13px; height:13px; bottom:-17px; left:22px; }
+  .thought-bubble::after{ width:7px; height:7px; bottom:-27px; left:12px; }
+  .thought-dots{ display:inline-block; margin-left:2px; }
+  .thought-dots span{ opacity:0.25; animation: dotPulse 1.2s infinite; }
+  .thought-dots span:nth-child(2){ animation-delay:0.2s; }
+  .thought-dots span:nth-child(3){ animation-delay:0.4s; }
+  @keyframes dotPulse{ 0%,100%{ opacity:0.25; } 50%{ opacity:1; } }
+
+  .firstaid-card{
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 18px; margin: 12px 20px; padding: 14px 16px; direction: ltr;
+    display:none;
+  }
+  .firstaid-card.show{ display:block; }
+  .firstaid-card-head{
+    display:flex; align-items:center; gap:8px;
+    font-family:'Inter', sans-serif; font-weight:700; font-size:14px;
+    letter-spacing:0.02em; color:var(--accent); margin-bottom:10px;
+  }
+  .fa-icon{ font-size:20px; }
+  .fa-step{
+    display:flex; align-items:flex-start; gap:10px; direction:ltr; text-align:left;
+    padding:6px 0; border-top: 1px solid var(--border);
+  }
+  .fa-step:first-of-type{ border-top:none; }
+  .fa-num{
+    flex-shrink:0; width:22px; height:22px; border-radius:50%;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    color:#fff; font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:11.5px;
+    display:flex; align-items:center; justify-content:center; margin-top:1px;
+  }
+  .fa-text{ font-family:'Inter', sans-serif; font-size:13.5px; color:var(--text); flex:1; line-height:1.7; }
+
+  .emergency-banner{
+    background: rgba(255,92,77,0.12); border:1px solid rgba(255,92,77,0.45);
+    color:#E24634; padding: 10px 16px; border-radius: 999px;
+    text-align:center; margin: 14px 20px; font-size:12.5px;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.06em;
+    display:none;
+  }
+  .emergency-banner.show{ display:block; }
+
+  .emergency-actions{ display:flex; gap:10px; margin: 14px 20px 6px; }
+  .emergency-actions a{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:8px;
+    padding: 12px 10px; border-radius: 14px; text-decoration:none !important;
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:13px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    transition: transform 0.15s ease;
+  }
+  .emergency-actions a:hover{ transform: translateY(-1px); }
+  .btn-rescue{ background: linear-gradient(135deg, #C81E2C, #FF5C4D); color:#fff !important; box-shadow: 0 8px 20px -8px rgba(255,92,77,0.6); }
+  .btn-hospital{ background: var(--card-bg); border:1px solid var(--border); color:var(--text) !important; }
+  .btn-whatsapp{ background: linear-gradient(135deg, #128C4A, #25D366); color:#fff !important; box-shadow: 0 8px 20px -8px rgba(37,211,102,0.55); }
+
+  .chip-label{
+    text-align:center; font-family:'Inter', sans-serif; font-size:12px;
+    letter-spacing:0.04em; color:var(--muted); margin: 16px 20px 8px;
+  }
+  .chip-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; padding: 0 12px; }
+  .chip-btn{
+    width: 100%;
+    background: var(--chip-bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    padding: 10px 6px;
+    cursor:pointer;
+    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .chip-btn:hover{ background: var(--chip-bg-hover); border-color: var(--accent); transform: translateY(-1px); }
+  .chip-btn:active{ transform: scale(0.97); }
+
+  .mic-frame{
+    display:flex; flex-direction:column; align-items:center;
+    margin: 18px auto 4px; padding: 18px;
+    max-width: 220px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+  }
+  #mic-btn{
+    width:64px; height:64px; border-radius:50%; border:none; cursor:pointer;
+    background: var(--orb-color); color:#fff; font-size:24px;
+    box-shadow: 0 8px 20px -8px rgba(0,0,0,0.35);
+    transition: background 0.2s ease, transform 0.15s ease;
+  }
+  #mic-btn:active{ transform: scale(0.95); }
+  #mic-btn.recording{ background:#FF5C4D; animation: pulse 1s infinite; }
+  @keyframes pulse{ 0%{ box-shadow:0 0 0 0 rgba(255,92,77,0.5);} 70%{ box-shadow:0 0 0 14px rgba(255,92,77,0);} 100%{ box-shadow:0 0 0 0 rgba(255,92,77,0);} }
+  .mic-hint{ font-family:'Inter', sans-serif; font-size:11px; color:var(--muted); margin-top:8px; text-align:center; }
+
+  .chat-area{ margin: 14px 20px 4px; display:flex; flex-direction:column; gap:10px; }
+  .chat-message{
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 16px; padding: 10px 14px; max-width:85%;
+    font-family:'Inter', sans-serif; font-size:14px; line-height:1.6;
+  }
+  .chat-message.user{ align-self:flex-end; }
+  .chat-message.assistant{ align-self:flex-start; }
+  .chat-role{ font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+
+  .banner{
+    padding: 11px 16px; border-radius: 14px; margin: 10px 20px;
+    font-family:'Inter', sans-serif; font-size:13px; text-align:left;
+    line-height:1.7; border: 1px solid; display:none;
+  }
+  .banner.show{ display:block; }
+  .banner-warning{ background: rgba(250,180,60,0.10); border-color: rgba(250,180,60,0.4); color:#B47B12; }
+
+  .text-input-row{
+    display:flex; gap:8px; margin: 4px 20px 6px;
+  }
+  #textInput{
+    flex:1; padding: 11px 14px; border-radius: 14px;
+    border: 1px solid var(--border); background: var(--card-bg);
+    font-family:'Inter', sans-serif; font-size:13.5px; color: var(--text);
+    outline: none;
+  }
+  #textInput:focus{ border-color: var(--accent); }
+  #sendBtn{
+    padding: 11px 18px; border-radius: 14px; border:none; cursor:pointer;
+    background: var(--accent); color:#fff; font-family:'Space Grotesk', sans-serif;
+    font-weight:700; font-size:13px;
+  }
+  #sendBtn:active{ transform: scale(0.97); }
+
+  .madad-footer{
+    text-align:center; color:var(--muted); font-size:11px;
+    margin: 30px 20px 4px; font-family:'Space Grotesk', sans-serif;
+  }
+
+  #settingsBtn{
+    margin-left:auto; width:32px; height:32px; border-radius:10px;
+    border:1px solid var(--border); background: var(--card-bg); cursor:pointer;
+    font-size:15px; display:flex; align-items:center; justify-content:center;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  #settingsBtn:hover{ background: var(--chip-bg-hover); transform: rotate(25deg); }
+
+  .modal-overlay{
+    position:fixed; inset:0; background: rgba(20,18,14,0.45);
+    display:none; align-items:center; justify-content:center; z-index:50;
+    padding: 20px;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal-box{
+    background: var(--bg); border:1px solid var(--border); border-radius:20px;
+    padding: 22px; max-width: 380px; width:100%;
+    box-shadow: 0 30px 70px -20px rgba(0,0,0,0.35);
+  }
+  .modal-title{
+    font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:15px;
+    color: var(--text); margin-bottom:8px;
+  }
+  .modal-sub{
+    font-family:'Inter', sans-serif; font-size:12.5px; color: var(--muted);
+    line-height:1.6; margin-bottom:14px;
+  }
+  #apiKeyInput{
+    width:100%; padding: 11px 14px; border-radius:12px;
+    border:1px solid var(--border); background: var(--card-bg);
+    font-family:'Space Grotesk', sans-serif; font-size:13px; color: var(--text);
+    outline:none; margin-bottom:14px;
+  }
+  #apiKeyInput:focus{ border-color: var(--accent); }
+  .modal-actions{ display:flex; gap:8px; justify-content:flex-end; }
+  .modal-btn-primary, .modal-btn-secondary{
+    padding: 9px 16px; border-radius:12px; border:none; cursor:pointer;
+    font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:12.5px;
+  }
+  .modal-btn-primary{ background: var(--accent); color:#fff; }
+  .modal-btn-secondary{ background: var(--card-bg); border:1px solid var(--border); color: var(--text); }
+</style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="madad-topbar">
+      <div class="madad-logo"><img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCACgAKADASIAAhEBAxEB/8QAHAAAAgMBAQEBAAAAAAAAAAAABAUCAwYHAQAI/8QARxAAAQMDAgIFBwcKBQQDAAAAAQIDBAAFEQYSITEHEyJBURQyYXGBkbEVIyVCU3KhCENEUmJzgrLC0RYzdIPBJGOS4TST8P/EABgBAAMBAQAAAAAAAAAAAAAAAAABAgME/8QAJhEAAgICAgEDBQEBA~~~~~~~~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" alt="Medi-Care logo"></div>
+      <div class="madad-wordmark">Madad<span>AI FIRST-AID · URDU</span></div>
+      <button id="settingsBtn" title="Groq API Key set karein">⚙️</button>
+    </div>
+
+    <div class="madad-title">Madad</div>
+
+    <div class="offline-badge" id="offlineBadge" style="display:none;">📴 Offline Mode</div>
+    <div class="state-label" id="stateLabel">Madad Tayyar Hai</div>
+
+    <div id="robot-wrap">
+      <canvas id="bot-canvas"></canvas>
+      <div class="thought-bubble" id="thoughtBubble">
+        <span class="tb-text"></span><span class="thought-dots"><span>.</span><span>.</span><span>.</span></span>
+      </div>
+    </div>
+
+    <div class="emergency-banner" id="emergencyBanner">⚠️ Yeh Emergency Ho Sakti Hai</div>
+
+    <div class="firstaid-card" id="firstaidCard">
+      <div class="firstaid-card-head"><span class="fa-icon" id="faIcon"></span><span id="faTitle"></span></div>
+      <div id="faSteps"></div>
+    </div>
+
+    <div class="emergency-actions">
+      <a class="btn-rescue" href="tel:1122">🚑 Rescue 1122</a>
+      <a class="btn-hospital" href="https://www.google.com/maps/search/hospital+near+me" target="_blank">🗺️ Maps</a>
+      <a class="btn-whatsapp" id="waLink" href="https://wa.me/?text=Emergency" target="_blank">📲 WhatsApp</a>
+    </div>
+
+    <div class="chip-label">Ya neeche se apni alamat chunein:</div>
+    <div class="chip-grid" id="chipGrid"></div>
+
+    <div class="mic-frame">
+      <button id="mic-btn">🎤</button>
+      <div class="mic-hint" id="micHint">Bolein ya upar se alamat chunein</div>
+    </div>
+
+    <div class="banner banner-warning" id="warnBanner">⚠️ Awaz samajh nahi aayi. Dobara bolein ya neeche likh kar bhejein.</div>
+
+    <div class="text-input-row">
+      <input type="text" id="textInput" placeholder="Yahan apni alamat likhein...">
+      <button id="sendBtn">Bhejein</button>
+    </div>
+
+    <div class="chat-area" id="chatArea"></div>
+
+    <div class="madad-footer">Madad — Yeh AI mashwara tibbi diagnosis nahi hai. Sanjeeda halat mein foran hospital jayein.</div>
+  </div>
+
+  <div class="modal-overlay" id="apiModal">
+    <div class="modal-box">
+      <div class="modal-title">Groq API Key</div>
+      <div class="modal-sub">Apni Groq API key yahan paste karein taake real AI se jawab milein. Ye key sirf is browser mein (isi device par) save hoti hai — kisi server par nahi jati.</div>
+      <input type="password" id="apiKeyInput" placeholder="gsk_...">
+      <div class="modal-actions">
+        <button id="apiKeyClear" class="modal-btn-secondary">Clear</button>
+        <button id="apiKeyCancel" class="modal-btn-secondary">Band Karein</button>
+        <button id="apiKeySave" class="modal-btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // ---------------- Data ----------------
+    const FIRSTAID_CARDS = [
+      {
+        keywords: ["jal","jalna","jalan","aag","burn"],
+        icon: "🔥", title: "Jalna — Ibtidai Tibbi Imdad",
+        steps: [
+          "Jali jagah ko thande saaf paani se 10 minute dhoyein",
+          "Barf seedha jild par mat lagayein",
+          "Chhala (blister) mat phorein",
+          "Saaf, dheeli patti se dhaanp dein"
+        ],
+        reply: "Jali hui jagah ko foran thande saaf paani se kam az kam das minute tak dhoyein. Barf seedha jild par mat lagayein. Chhala mat phorein aur jagah ko saaf, dheeli patti se dhaanp dein. Agar jalan gehri ho ya chehre, haathon par ho to foran qareebi hospital jayein ya emergency se rabta karein.",
+        reply_ur: "جلی ہوئی جگہ کو فوراً ٹھنڈے صاف پانی سے کم از کم دس منٹ تک دھوئیں۔ برف سیدھا جلد پر مت لگائیں۔ چھالے کو مت پھوڑیں اور جگہ کو صاف، ڈھیلی پٹی سے ڈھانپ دیں۔ اگر جلن گہری ہو یا چہرے، ہاتھوں پر ہو تو فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔"
+      },
+      {
+        keywords: ["cut","katna","zakhm","khoon","kat"],
+        icon: "🩸", title: "Katna / Khoon Behna — Ibtidai Tibbi Imdad",
+        steps: [
+          "Saaf kapre se zakhm par halka dabao dalein",
+          "Zakhm ko saaf paani se dhoyein",
+          "Khushk, saaf patti bandhein",
+          "Khoon na ruke to foran hospital jayein"
+        ],
+        reply: "Zakhm par saaf kapra ya gauze rakh kar halka dabao dalein taake khoon rukna shuru ho. Zakhm ko saaf paani se dho kar khushk, saaf patti bandhein. Agar khoon bohat zyada beh raha ho ya das minute mein na ruke to foran qareebi hospital jayein ya emergency se rabta karein.",
+        reply_ur: "زخم پر صاف کپڑا یا گوز رکھ کر ہلکا دباؤ ڈالیں تاکہ خون رکنا شروع ہو۔ زخم کو صاف پانی سے دھو کر خشک، صاف پٹی باندھیں۔ اگر خون بہت زیادہ بہہ رہا ہو یا دس منٹ میں نہ روکے تو فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔"
+      },
+      {
+        keywords: ["dum ghut","saans","choking","dumghut"],
+        icon: "🫁", title: "Dum Ghutna — Ibtidai Tibbi Imdad",
+        steps: [
+          "Peeche khare ho kar naaf ke oopar muthi rakhein",
+          "Tezi se andar aur oopar ki taraf dabayein",
+          "Cheez bahar aane tak dabao jari rakhein",
+          "Foran madad bulayein"
+        ],
+        reply: "Agar dum ghut raha ho aur bola ya khaansa na ja sake to peeche khare ho kar naaf ke oopar muthi bana kar tezi se andar aur oopar ki taraf dabayein (Heimlich maneuver). Cheez bahar aane ya madad pahunchne tak koshish jari rakhein. Foran qareebi hospital jayein ya emergency se rabta karein.",
+        reply_ur: "اگر دم گھٹ رہا ہو اور بولا یا کھانسا نہ جا سکے تو پیچھے کھڑے ہو کر ناف کے اوپر مٹھی بنا کر تیزی سے اندر اور اوپر کی طرف دبائیں۔ چیز باہر آنے یا مدد پہنچنے تک کوشش جاری رکھیں۔ فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔"
+      },
+      {
+        keywords: ["haddi","fracture","moch"],
+        icon: "🦴", title: "Haddi Tootna / Moch — Ibtidai Tibbi Imdad",
+        steps: [
+          "Mutasira hisse ko harkat dene se rokein",
+          "Mazboot takhti ya mote kapre se sahara dein",
+          "Sujan kam karne ko halki thandak lagayein",
+          "Haddi khud seedhi karne ki koshish na karein"
+        ],
+        reply: "Mutasira hisse ko harkat dene se rokein aur ise kisi mazboot takhti ya mote kapre se sahara de kar bandh dein. Sujan kam karne ke liye halki thandak lagayi ja sakti hai. Haddi ko khud seedha karne ki koshish na karein. Foran qareebi hospital jayein ya emergency se rabta karein.",
+        reply_ur: "متاثرہ حصے کو حرکت دینے سے روکیں اور اسے کسی مضبوط تختی یا موٹے کپڑے سے سہارا دے کر باندھ دیں۔ سوجن کم کرنے کے لیے ہلکی ٹھنڈک لگائی جا سکتی ہے۔ ہڈی کو خود سیدھا کرنے کی کوشش نہ کریں۔ فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔"
+      },
+      {
+        keywords: ["behosh","ghash","behoshi","faint"],
+        icon: "😵", title: "Behoshi — Ibtidai Tibbi Imdad",
+        steps: [
+          "Peeth ke bal lita kar taangein thori oonchi karein",
+          "Tang kapre dheele kar dein",
+          "Kuch khilane pilane ki koshish na karein",
+          "Ek do minute mein hosh na aaye to foran hospital jayein"
+        ],
+        reply: "Mareez ko peeth ke bal lita kar taangein thori oonchi kar dein taake khoon sar ki taraf jaye. Tang kapre dheele kar dein aur taza hawa aane dein. Kuch khilane pilane ki koshish na karein. Agar ek do minute mein hosh na aaye to foran qareebi hospital jayein ya emergency se rabta karein.",
+        reply_ur: "مریض کو پیٹھ کے بل لٹا کر ٹانگیں تھوڑی اونچی کر دیں تاکہ خون سر کی طرف جائے۔ تنگ کپڑے ڈھیلے کر دیں اور تازہ ہوا آنے دیں۔ کچھ کھلانے پلانے کی کوشش نہ کریں۔ اگر ایک دو منٹ میں ہوش نہ آئے تو فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔"
+      },
+      {
+        keywords: ["zeher","poison","zehreela"],
+        icon: "☠️", title: "Zeher — Ibtidai Tibbi Imdad",
+        steps: [
+          "Khud qay karwane ki koshish na karein",
+          "Muh mein bacha hua maadah nikal dein",
+          "Mareez ko aaram se bithayein",
+          "Zehreeli cheez ka dabba ya namoona sath rakhein"
+        ],
+        reply: "Agar kuch zehreela nigal liya gaya ho to khud qay karwane ki koshish na karein. Muh mein bacha hua maadah nikal dein aur mareez ko aaram se bithayein. Jis cheez se zeher laga uska dabba ya namoona sath rakhein. Foran qareebi hospital jayein ya emergency se rabta karein.",
+        reply_ur: "اگر کچھ زہریلا نگل لیا گیا ہو تو خود قے کروانے کی کوشش نہ کریں۔ منہ میں بچا ہوا مادہ نکال دیں اور مریض کو آرام سے بٹھائیں۔ جس چیز سے زہر لگا اس کا ڈبہ یا نمونہ ساتھ رکھیں۔ فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔"
+      }
+    ];
+
+    const GENERIC_ADVICE = "Maazrat, is waqt AI se rabta nahi ho saka is liye yeh aam hidayaat hain: zakhmi ya bimar shakhs ko pursukoon rakhein, saans aur nabz check karein, aur khoon beh raha ho to saaf kapre se dabayein. Halat sangeen lage to foran qareebi hospital jayein ya emergency se rabta karein.";
+    const GENERIC_ADVICE_UR = "معذرت، اس وقت AI سے رابطہ نہیں ہو سکا اس لیے یہ عام ہدایات ہیں: زخمی یا بیمار شخص کو پرسکون رکھیں، سانس اور نبض چیک کریں، اور خون بہہ رہا ہو تو صاف کپڑے سے دبائیں۔ حالت سنگین لگے تو فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔";
+
+    const QUICK_CHIPS = [
+      { label: "🔥 Jalna", phrase: "Main jal gaya hoon, jild par jalan aur laali hai." },
+      { label: "🔪 Katna", phrase: "Mujhe cut lag gaya hai aur khoon beh raha hai." },
+      { label: "🫁 Dum Ghutna", phrase: "Dum ghut raha hai, saans lene mein mushkil ho rahi hai." },
+      { label: "🦴 Haddi Tootna", phrase: "Lagta hai haddi toot gayi hai ya moch aayi hai." },
+      { label: "😵 Behoshi", phrase: "Koi shakhs achanak behosh ho gaya hai." },
+      { label: "☠️ Zeher", phrase: "Kuch zehreeli cheez kha ya pi li gayi hai." }
+    ];
+
+    const EMERGENCY_PATTERN = /hospital|emergency|ہسپتال|ایمرجنسی/i;
+
+    function findEmergencyCard(text){
+      if(!text) return null;
+      const lowered = text.toLowerCase();
+      return FIRSTAID_CARDS.find(card => card.keywords.some(kw => lowered.includes(kw))) || null;
+    }
+
+    function getAdvice(text){
+      const card = findEmergencyCard(text);
+      return card ? card.reply : GENERIC_ADVICE;
+    }
+
+    function getAdviceUrdu(text){
+      const card = findEmergencyCard(text);
+      return card ? card.reply_ur : GENERIC_ADVICE_UR;
+    }
+
+    // ---------------- Groq API ----------------
+    const GROQ_MODEL = "llama-3.3-70b-versatile";
+    const GROQ_SYSTEM_PROMPT =
+      "You are a careful First Aid Assistant. Always reply in clear, natural Urdu script " +
+      "(Urdu/Nastaliq script, never Roman Urdu or English). You never name medicines, never " +
+      "diagnose a condition, and always keep answers to one short paragraph.";
+
+    function buildGroqPrompt(patientText){
+      return `تم ایک سمارٹ AI فرسٹ ایڈ اسسٹنٹ ہو۔
+
+مریض کی بات:
+${patientText}
+
+صرف ابتدائی طبی امداد بتاؤ۔
+
+قواعد:
+- جواب ہمیشہ اردو رسم الخط (Urdu Script) میں دو
+- آسان اور سلیس اردو استعمال کرو
+- جواب ایک مختصر، رواں پیراگراف کی صورت میں دو
+- زیادہ سے زیادہ 4-5 جملے
+- کوئی تمہید یا سلام مت لکھو
+- دوا کا نام نہ بتاؤ
+- بیماری کی تشخیص نہ کرو
+- اگر حالت خطرناک ہو تو پیراگراف کے آخر میں شامل کرو:
+'فوراً قریبی ہسپتال جائیں یا ایمرجنسی سے رابطہ کریں۔'`;
+    }
+
+    function cleanGroqResponse(text){
+      return text.trim().split('\n')
+        .map(ln => ln.replace(/^\s*(\d+[.)]|[-•])\s*/, '').trim())
+        .filter(Boolean)
+        .join(' ');
+    }
+
+    const DEFAULT_GROQ_KEY = "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";
+
+    function getApiKey(){ return localStorage.getItem('madad_groq_key') || DEFAULT_GROQ_KEY; }
+    function setApiKey(k){
+      if(k) localStorage.setItem('madad_groq_key', k);
+      else localStorage.removeItem('madad_groq_key');
+    }
+
+    async function askGroq(patientText, historyArr){
+      const key = getApiKey();
+      if(!key) return null;
+
+      const messages = [{ role: 'system', content: GROQ_SYSTEM_PROMPT }];
+      const priorTurns = historyArr.slice(0, -1).slice(-6);
+      priorTurns.forEach(t => {
+        messages.push({ role: t.role === 'patient' ? 'user' : 'assistant', content: t.text });
+      });
+      messages.push({ role: 'user', content: buildGroqPrompt(patientText) });
+
+      const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + key
+        },
+        body: JSON.stringify({ model: GROQ_MODEL, messages, temperature: 0.3 })
+      });
+
+      if(!resp.ok){
+        const errBody = await resp.text().catch(() => '');
+        throw new Error(`Groq API ${resp.status}: ${errBody}`);
+      }
+      const data = await resp.json();
+      const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+      if(!content) throw new Error('Groq: khaali jawab mila');
+      return cleanGroqResponse(content);
+    }
+
+    // ---------------- Chips ----------------
+    const chipGrid = document.getElementById('chipGrid');
+    QUICK_CHIPS.forEach(chip => {
+      const btn = document.createElement('button');
+      btn.className = 'chip-btn';
+      btn.textContent = chip.label;
+      btn.onclick = () => handlePatientInput(chip.phrase);
+      chipGrid.appendChild(btn);
+    });
+
+    // ---------------- State ----------------
+    let history = [];
+    const orb = { normal: "#B8935B", emergency: "#E24634" };
+
+    function setOrbColor(color){
+      document.documentElement.style.setProperty('--orb-color', color);
+    }
+
+    // ---------------- Emergency siren ----------------
+    let sirenCtx = null;
+    let sirenPlaying = false;
+
+    function playEmergencySiren(durationSec = 3.5){
+      if(sirenPlaying) return;
+      try{
+        if(!sirenCtx) sirenCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if(sirenCtx.state === 'suspended') sirenCtx.resume();
+
+        const ctx = sirenCtx;
+        const now = ctx.currentTime;
+        const end = now + durationSec;
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.frequency.setValueAtTime(600, now);
+        let t = now;
+        while(t < end){
+          osc.frequency.linearRampToValueAtTime(1100, t + 0.5);
+          osc.frequency.linearRampToValueAtTime(600, t + 1.0);
+          t += 1.0;
+        }
+
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.22, now + 0.15);
+        gain.gain.setValueAtTime(0.22, Math.max(now + 0.15, end - 0.3));
+        gain.gain.linearRampToValueAtTime(0, end);
+
+        osc.start(now);
+        osc.stop(end);
+
+        sirenPlaying = true;
+        osc.onended = () => { sirenPlaying = false; };
+      }catch(err){
+        console.warn('Siren playback failed:', err);
+        sirenPlaying = false;
+      }
+    }
+
+    function renderCard(card){
+      const el = document.getElementById('firstaidCard');
+      if(!card){ el.classList.remove('show'); return; }
+      document.getElementById('faIcon').textContent = card.icon;
+      document.getElementById('faTitle').textContent = card.title;
+      const stepsHtml = card.steps.map((s,i) => `
+        <div class="fa-step"><span class="fa-num">${i+1}</span><span class="fa-text">${s}</span></div>
+      `).join('');
+      document.getElementById('faSteps').innerHTML = stepsHtml;
+      el.classList.add('show');
+    }
+
+    function addMessage(role, text, isUrduScript){
+      const wrap = document.createElement('div');
+      wrap.className = `chat-message ${role === 'patient' ? 'user' : 'assistant'}`;
+      const roleLabel = document.createElement('div');
+      roleLabel.className = 'chat-role';
+      roleLabel.textContent = role === 'patient' ? 'Aap' : 'Madad';
+      const body = document.createElement('div');
+      body.textContent = text;
+      if(isUrduScript){
+        body.dir = 'rtl';
+        body.style.textAlign = 'right';
+        body.style.fontFamily = "'Noto Nastaliq Urdu', 'Inter', sans-serif";
+      }
+      wrap.appendChild(roleLabel);
+      wrap.appendChild(body);
+      document.getElementById('chatArea').appendChild(wrap);
+      wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function updateWhatsappLink(){
+      const lastPatient = [...history].reverse().find(t => t.role === 'patient');
+      const situation = lastPatient ? lastPatient.text : "Emergency situation — madad chahiye.";
+      document.getElementById('waLink').href = "https://wa.me/?text=" + encodeURIComponent("🚨 Emergency: " + situation);
+    }
+
+    // ---------------- Voice Selection Engine ----------------
+    let cachedVoices = [];
+    function refreshVoices(){ cachedVoices = window.speechSynthesis.getVoices() || []; }
+    if('speechSynthesis' in window){
+      refreshVoices();
+      window.speechSynthesis.onvoiceschanged = refreshVoices;
+    }
+
+    function pickBestVoice(){
+      if(!cachedVoices.length) refreshVoices();
+      if(!cachedVoices.length) return null;
+      const byLangPrefix = (p) => cachedVoices.find(v => v.lang && v.lang.toLowerCase().startsWith(p));
+      const byNameMatch = (re) => cachedVoices.find(v => re.test(v.name));
+      
+      return byLangPrefix('ur') || byNameMatch(/urdu/i) || byLangPrefix('ar') ||
+             byNameMatch(/arabic/i) || byLangPrefix('hi') || cachedVoices[0] || null;
+    }
+
+    let speakKeepAlive = null;
+    function startKeepAlive(){
+      stopKeepAlive();
+      speakKeepAlive = setInterval(() => {
+        if(window.speechSynthesis.speaking){
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }
+      }, 4000);
+    }
+    function stopKeepAlive(){
+      if(speakKeepAlive){ clearInterval(speakKeepAlive); speakKeepAlive = null; }
+    }
+
+    let ttsUnlocked = false;
+    function unlockSpeech(){
+      if(ttsUnlocked || !('speechSynthesis' in window)) return;
+      ttsUnlocked = true;
+      try{
+        const primer = new SpeechSynthesisUtterance(' ');
+        primer.volume = 0;
+        window.speechSynthesis.speak(primer);
+      }catch(e){}
+    }
+    document.addEventListener('click', unlockSpeech, { once:true, capture:true });
+    document.addEventListener('touchstart', unlockSpeech, { once:true, capture:true });
+
+    function speak(text, onDone){
+      if(!('speechSynthesis' in window)){ if(onDone) onDone(); return; }
+      try{
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        const voice = pickBestVoice();
+        if(voice){
+          utter.voice = voice;
+          utter.lang = voice.lang;
+        } else {
+          utter.lang = "ur-PK";
+        }
+        utter.rate = 0.92;
+        utter.pitch = 1.04;
+        utter.onboundary = () => pulseMouth();
+        utter.onstart = () => { pulseMouth(); startKeepAlive(); };
+        utter.onend = () => { stopKeepAlive(); if(onDone) onDone(); };
+        utter.onerror = () => { stopKeepAlive(); if(onDone) onDone(); };
+
+        if(!cachedVoices.length){
+          setTimeout(() => { refreshVoices(); }, 150);
+        }
+        window.speechSynthesis.speak(utter);
+      }catch(e){ stopKeepAlive(); if(onDone) onDone(); }
+    }
+
+    function showThoughtBubble(text){
+      const bubble = document.getElementById('thoughtBubble');
+      const short = text.length > 70 ? text.slice(0, 70) + '…' : text;
+      bubble.querySelector('.tb-text').textContent = short;
+      bubble.classList.add('show');
+    }
+    function hideThoughtBubble(){
+      document.getElementById('thoughtBubble').classList.remove('show');
+    }
+
+    async function handlePatientInput(text){
+      if(!text) return;
+      history.push({ role: 'patient', text });
+      addMessage('patient', text);
+
+      showThoughtBubble(text);
+      setRobotState('thinking');
+      document.getElementById('stateLabel').textContent = "Soch Rahe Hain...";
+
+      const minThink = 1400;
+      const thinkStart = Date.now();
+
+      let answer = null;
+      let answerIsUrduScript = false;
+      let usedOffline = false;
+
+      try{
+        const aiAnswer = await askGroq(text, history);
+        if(aiAnswer){
+          answer = aiAnswer;
+          answerIsUrduScript = true;
+        }
+      }catch(err){
+        console.warn('Groq API se jawab nahi mila, offline data use ho raha hai:', err);
+      }
+
+      if(!answer){
+        usedOffline = true;
+        answer = getAdvice(text);
+      }
+
+      const elapsed = Date.now() - thinkStart;
+      const remaining = Math.max(0, minThink - elapsed) + 400 + Math.random() * 700;
+
+      setTimeout(() => {
+        hideThoughtBubble();
+
+        const card = findEmergencyCard(text);
+        renderCard(card);
+
+        history.push({ role: 'assistant', text: answer });
+
+        const isEmergency = EMERGENCY_PATTERN.test(answer);
+        document.getElementById('emergencyBanner').classList.toggle('show', isEmergency);
+        setOrbColor(isEmergency ? orb.emergency : orb.normal);
+        if(isEmergency) playEmergencySiren(3.5);
+        document.getElementById('offlineBadge').style.display = usedOffline ? 'flex' : 'none';
+
+        setRobotState('serving', isEmergency);
+        document.getElementById('stateLabel').textContent = "Jawab De Rahe Hain...";
+        addMessage('assistant', answer, answerIsUrduScript);
+        updateWhatsappLink();
+
+        const speakText = answerIsUrduScript ? answer : getAdviceUrdu(text);
+        speak(speakText, () => {
+          setRobotState('idle', isEmergency);
+          document.getElementById('stateLabel').textContent = isEmergency ? "Emergency Advice" : "Madad Yahan Hai";
+        });
+      }, remaining);
+    }
+
+    // ---------------- Text Input Handler ----------------
+    const textInput = document.getElementById('textInput');
+    const sendBtn = document.getElementById('sendBtn');
+    function sendTyped(){
+      const text = textInput.value.trim();
+      if(!text) return;
+      handlePatientInput(text);
+      textInput.value = '';
+    }
+    sendBtn.addEventListener('click', sendTyped);
+    textInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') sendTyped(); });
+
+    // ---------------- Fixed Mic (Web Speech API) ----------------
+    const micBtn = document.getElementById('mic-btn');
+    const micHint = document.getElementById('micHint');
+    const warnBanner = document.getElementById('warnBanner');
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    const isFileProtocol = location.protocol === 'file:';
+    const isSecureContext = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost';
+
+    if(isFileProtocol){
+      micHint.textContent = "Mic ke liye is file ko Live Server par chalayein";
+      micBtn.addEventListener('click', () => {
+        warnBanner.textContent = "⚠️ Mic file:// par kaam nahi karta. VS Code 'Live Server' extension se http://127.0.0.1:5501 par kholein.";
+        warnBanner.classList.add('show');
+        textInput.focus();
+      });
+    } else if(!isSecureContext){
+      micHint.textContent = "Mic sirf HTTPS ya localhost par chalta hai";
+      micBtn.addEventListener('click', () => {
+        warnBanner.textContent = "⚠️ Mic ke liye secure connection (localhost / https) zaroori hai.";
+        warnBanner.classList.add('show');
+        textInput.focus();
+      });
+    } else if(SpeechRecognitionCtor){
+      let recognizer = new SpeechRecognitionCtor();
+      let micGotResult = false;
+      const LANG_ATTEMPTS = ["ur-PK", "en-PK", "en-US"];
+      let langIndex = 0;
+      recognizer.lang = LANG_ATTEMPTS[langIndex];
+      recognizer.interimResults = false;
+      recognizer.maxAlternatives = 1;
+
+      recognizer.onstart = () => {
+        micBtn.classList.add('recording'); 
+        warnBanner.classList.remove('show');
+        micGotResult = false;
+        setRobotState('listening');
+        document.getElementById('stateLabel').textContent = "Sun Rahe Hain...";
+      };
+      
+      recognizer.onend = () => {
+        micBtn.classList.remove('recording');
+        if(!micGotResult){
+          setRobotState('idle');
+          document.getElementById('stateLabel').textContent = "Madad Tayyar Hai";
+        }
+      };
+      
+      recognizer.onerror = (e) => {
+        micBtn.classList.remove('recording');
+        if(!micGotResult){ setRobotState('idle'); }
+        if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+          warnBanner.textContent = "⚠️ Mic ki ijazat nahi mili. Browser settings mein mic allow karein.";
+        } else if(e.error === 'network'){
+          warnBanner.textContent = "⚠️ Mic ke liye internet connection zaroori hai. Network check karein.";
+        } else if(e.error === 'language-not-supported' && langIndex < LANG_ATTEMPTS.length - 1){
+          langIndex++;
+          recognizer.lang = LANG_ATTEMPTS[langIndex];
+          warnBanner.classList.remove('show');
+          return;
+        } else {
+          warnBanner.textContent = "⚠️ Awaz samajh nahi aayi. Dobara bolein ya neeche likh kar bhejein.";
+        }
+        warnBanner.classList.add('show');
+      };
+
+      recognizer.onresult = (event) => {
+        micGotResult = true;
+        const transcript = event.results[0][0].transcript;
+        handlePatientInput(transcript);
+      };
+
+      micBtn.addEventListener('click', () => {
+        try{ recognizer.start(); }catch(e){ /* already active */ }
+      });
+    } else {
+      micHint.textContent = "Browser voice recognition support nahi karta";
+      micBtn.addEventListener('click', () => textInput.focus());
+    }
+
+    // ---------------- Settings modal (Groq API key) ----------------
+    const settingsBtn = document.getElementById('settingsBtn');
+    const apiModal = document.getElementById('apiModal');
+    const apiKeyInput = document.getElementById('apiKeyInput');
+    const apiKeySave = document.getElementById('apiKeySave');
+    const apiKeyClear = document.getElementById('apiKeyClear');
+    const apiKeyCancel = document.getElementById('apiKeyCancel');
+
+    function openApiModal(){
+      apiKeyInput.value = getApiKey();
+      apiModal.classList.add('show');
+    }
+    function closeApiModal(){ apiModal.classList.remove('show'); }
+
+    settingsBtn.addEventListener('click', openApiModal);
+    apiKeyCancel.addEventListener('click', closeApiModal);
+    apiModal.addEventListener('click', (e) => { if(e.target === apiModal) closeApiModal(); });
+    apiKeySave.addEventListener('click', () => {
+      setApiKey(apiKeyInput.value.trim());
+      closeApiModal();
+    });
+    apiKeyClear.addEventListener('click', () => {
+      setApiKey('');
+      apiKeyInput.value = '';
+    });
+
+    if(!getApiKey()){
+      setTimeout(openApiModal, 600);
+    }
+
+    // ---------------- Robot Avatar (Three.js Engine) ----------------
+    let setRobotState = () => {};
+    let pulseMouth = () => {};
+
+    (function(){
+      const wrap = document.getElementById('robot-wrap');
+      const canvas = document.getElementById('bot-canvas');
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+      renderer.setSize(wrap.clientWidth, wrap.clientHeight, false);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(38, wrap.clientWidth / wrap.clientHeight, 0.1, 100);
+      camera.position.set(0, 0.35, 7.4);
+
+      const botGroup = new THREE.Group();
+      scene.add(botGroup);
+
+      const visorMat = new THREE.MeshPhysicalMaterial({ color: 0x0A0A0C, roughness: 0.18, metalness: 0.35, clearcoat: 0.7, clearcoatRoughness: 0.18 });
+      const coatMat = new THREE.MeshPhysicalMaterial({ color: 0xF2F0E9, roughness: 0.62, clearcoat: 0.25, clearcoatRoughness: 0.45 });
+      const jointMat = new THREE.MeshPhysicalMaterial({ color: 0xDCD7C9, roughness: 0.45, metalness: 0.2 });
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0xB8935B });
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.95, 40, 40), visorMat);
+      head.position.set(0, 1.5, 0);
+      head.castShadow = true;
+      botGroup.add(head);
+
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 20), eyeMat);
+      eye.position.set(0, 1.5, 0.86);
+      botGroup.add(eye);
+      const eyeGlow = new THREE.PointLight(0xB8935B, 0.6, 3);
+      eyeGlow.position.copy(eye.position);
+      botGroup.add(eyeGlow);
+
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(1.02, 1.18, 2.15, 40), coatMat);
+      torso.position.set(0, -0.6, 0);
+      torso.castShadow = true;
+      torso.receiveShadow = true;
+      botGroup.add(torso);
+
+      function buildArm(sideSign){
+        const pivot = new THREE.Group();
+        pivot.position.set(sideSign * 1.06, 0.38, 0.05);
+
+        const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.14, 1.05, 16), coatMat);
+        upperArm.position.set(0, -0.5, 0);
+        upperArm.castShadow = true;
+        pivot.add(upperArm);
+
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 16), jointMat);
+        hand.position.set(0, -1.05, 0);
+        hand.castShadow = true;
+        pivot.add(hand);
+
+        botGroup.add(pivot);
+        return pivot;
+      }
+      const armL = buildArm(-1);
+      const armR = buildArm(1);
+
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.ShadowMaterial({ opacity: 0.22 }));
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = -1.75;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+      const key = new THREE.DirectionalLight(0xfff3e2, 1.15);
+      key.position.set(3, 5, 4);
+      key.castShadow = true;
+      key.shadow.mapSize.set(1024, 1024);
+      key.shadow.camera.near = 1;
+      key.shadow.camera.far = 12;
+      scene.add(key);
+      const fill = new THREE.PointLight(0xffffff, 0.3);
+      fill.position.set(-4, 1.5, 3);
+      scene.add(fill);
+      const rim = new THREE.PointLight(0xB8935B, 0.55);
+      rim.position.set(0, 3, -4);
+      scene.add(rim);
+
+      function onResize(){
+        const w = wrap.clientWidth, h = wrap.clientHeight;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
+      window.addEventListener('resize', onResize);
+      onResize();
+
+      const EYE_COLORS = { idle: 0xB8935B, listening: 0xE24634, thinking: 0xE8A33D, serving: 0x3E9B6F, emergency: 0xE24634 };
+      let animState = 'idle';
+      let pulseEnergy = 0;
+
+      setRobotState = (state, isEmergency) => {
+        animState = state;
+        let colorKey = state;
+        if((state === 'idle' || state === 'serving') && isEmergency) colorKey = 'emergency';
+        const hex = EYE_COLORS[colorKey] ?? EYE_COLORS.idle;
+        eyeMat.color.setHex(hex);
+        eyeGlow.color.setHex(hex);
+      };
+      pulseMouth = () => { pulseEnergy = 0.55; };
+
+      function animate(){
+        requestAnimationFrame(animate);
+        const t = Date.now() * 0.001;
+        pulseEnergy *= 0.82;
+
+        let targetArmL = 0, targetArmR = 0, targetTiltZ = 0, targetTurnY = 0, bobAmp = 0.05, bobSpeed = 2;
+        let eyeScale = 1;
+
+        if(animState === 'idle'){
+          eyeScale = 1 + Math.sin(t * 3) * 0.04;
+        } else if(animState === 'listening'){
+          bobAmp = 0.03; bobSpeed = 3;
+          eyeScale = 1 + Math.abs(Math.sin(t * 5)) * 0.25;
+        } else if(animState === 'thinking'){
+          bobAmp = 0.03; bobSpeed = 2;
+          targetTiltZ = Math.sin(t * 1.4) * 0.09;
+          targetTurnY = Math.sin(t * 0.7) * 0.16;
+          targetArmL = 0.12;
+          eyeScale = 1 + Math.sin(t * 6) * 0.14;
+        } else if(animState === 'serving'){
+          bobAmp = 0.045; bobSpeed = 2.2;
+          targetArmL = -1.35;
+          targetArmR = -1.35;
+          eyeScale = 1 + Math.sin(t * 9) * 0.05 + pulseEnergy;
+        }
+
+        botGroup.position.y = Math.sin(t * bobSpeed) * bobAmp;
+        botGroup.rotation.z += (targetTiltZ - botGroup.rotation.z) * 0.08;
+        botGroup.rotation.y += (targetTurnY - botGroup.rotation.y) * 0.08;
+        armL.rotation.x += (targetArmL - armL.rotation.x) * 0.09;
+        armR.rotation.x += (targetArmR - armR.rotation.x) * 0.09;
+        eye.scale.setScalar(Math.max(0.6, eyeScale));
+        eyeGlow.intensity = 0.5 * Math.max(0.6, eyeScale);
+
+        renderer.render(scene, camera);
+      }
+      animate();
+    })();
+
+    setRobotState('idle');
+    setOrbColor(orb.normal);
+  </script>
+</body>
+</html>
