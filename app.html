@@ -2,6 +2,7 @@
 <html lang="ur-Latn">
 <head>
 <meta charset="UTF-8">
+import { Analytics } from "@vercel/analytics/next"
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Madad — AI First-Aid Voice Assistant</title>
 <link rel="icon" type="image/x-icon" href="1.jpg"><style>
@@ -371,6 +372,8 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Vercel Web Analytics for Plain HTML -->
+  <script defer src="/_vercel/insights/script.js"></script>
   <script>
     // ---------------- Data ----------------
     const FIRSTAID_CARDS = [
